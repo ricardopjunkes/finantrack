@@ -1,0 +1,123 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TransactionType {
+  income
+  expense
+}
+
+model User {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @db.VarChar(120)
+  email        String        @unique @db.VarChar(254)
+  // Ausente para o usuário local sem login. Nunca contém senha em texto puro.
+  passwordHash String?
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
+  categories   Category[]
+  transactions Transaction[]
+  goals        Goal[]
+  sessions     Session[]
+  budgets      Budget[]
+
+  @@map("users")
+}
+
+model Session {
+  id String @id @default(uuid()) @db.Uuid
+  tokenHash String @unique @db.VarChar(64)
+  csrfToken String @db.VarChar(64)
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Category {
+  id           String          @id @default(uuid()) @db.Uuid
+  name         String          @db.VarChar(60)
+  type         TransactionType
+  color        String          @default("#10B981") @db.VarChar(7)
+  icon         String          @default("tag") @db.VarChar(60)
+  userId       String          @db.Uuid
+  user         User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  transactions Transaction[]
+  budgets      Budget[]
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([userId, name, type])
+  @@unique([id, userId, type])
+  @@map("categories")
+}
+
+model Transaction {
+  id          String          @id @default(uuid()) @db.Uuid
+  description String          @db.VarChar(120)
+  notes       String?         @db.VarChar(1000)
+  amount      Decimal         @db.Decimal(11, 2)
+  type        TransactionType
+  date        DateTime        @db.Date
+  categoryId  String          @db.Uuid
+  userId      String          @db.Uuid
+  user        User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  category    Category        @relation(fields: [categoryId, userId, type], references: [id, userId, type], onDelete: Restrict)
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([userId, date])
+  @@index([categoryId, userId, type])
+  @@map("transactions")
+}
+
+model Goal {
+  id            String    @id @default(uuid()) @db.Uuid
+  name          String    @db.VarChar(120)
+  targetAmount  Decimal   @db.Decimal(11, 2)
+  currentAmount Decimal   @default(0) @db.Decimal(11, 2)
+  deadline      DateTime? @db.Date
+  userId        String    @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+  status        String @default("active") @db.VarChar(10)
+  contributions Contribution[]
+
+  @@index([userId, deadline])
+  @@map("goals")
+}
+
+model Contribution {
+  id String @id @default(uuid()) @db.Uuid
+  goalId String @db.Uuid
+  goal Goal @relation(fields:[goalId],references:[id],onDelete:Cascade)
+  amount Decimal @db.Decimal(11,2)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([goalId,createdAt])
+  @@map("contributions")
+}
+
+model Budget {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields:[userId],references:[id],onDelete:Restrict)
+  categoryId String @db.Uuid
+  type TransactionType @default(expense)
+  category Category @relation(fields:[categoryId,userId,type],references:[id,userId,type],onDelete:Restrict)
+  amount Decimal @db.Decimal(11,2)
+  month Int
+  year Int
+  @@unique([userId,categoryId,month,year])
+  @@index([userId,year,month])
+  @@map("budgets")
+}
